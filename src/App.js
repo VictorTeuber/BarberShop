@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { firebaseConfig, appId } from './firebaseConfig';
+import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { firebaseConfig } from './firebaseConfig';
 import logo from './images/barbershop_logo_64x64.png';
-
-// Ensure Tailwind CSS is loaded (assumed to be available in the environment)
-// You might need to add <script src="https://cdn.tailwindcss.com"></script> in your HTML if not already present.
+import Header from './Header';
 
 const App = () => {
+    // Make Header login button open the login modal
+    const [userEmail, setUserEmail] = useState(null);
+    useEffect(() => {
+        window.onHeaderLoginClick = () => {
+            setModalTitle('Login Required');
+            setModalContent('Please log in to book an appointment.');
+            setShowModal(true);
+        };
+        return () => {
+            window.onHeaderLoginClick = undefined;
+        };
+    }, []);
     const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
     const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [appointments, setAppointments] = useState([]);
@@ -20,48 +29,44 @@ const App = () => {
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedTime, setSelectedTime] = useState('');
     const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
-    const [message, setMessage] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [modalContent, setModalContent] = useState('');
     const [modalTitle, setModalTitle] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
+    const [email, setEmail] = useState(''); // For login modal
+    const [password, setPassword] = useState(''); // For login modal
+    const [isLoggedIn, setIsLoggedIn] = useState(false); // Track login status
 
-    // Firebase Initialization and Authentication
     useEffect(() => {
         try {
-
             if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-              console.error("Firebase config is missing.");
-              setMessage("Error: Firebase configuration is missing.");
-            return;
+                console.error("Firebase config is missing.");
+                return;
             }
 
             const app = initializeApp(firebaseConfig);
             const firestore = getFirestore(app);
-            const firebaseAuth = getAuth(app);
+            const auth = getAuth(app);
 
             setDb(firestore);
-            setAuth(firebaseAuth);
 
-            // Sign in with custom token or anonymously
-            signInAnonymously(firebaseAuth)
-    .then((userCredential) => {
-        console.log("Signed in anonymously:", userCredential.user.uid);
-    })
-    .catch((error) => {
-        console.error("Error signing in anonymously:", error);
-        setMessage(`Error signing in: ${error.message}`);
-    });
+            signInAnonymously(auth)
+                .catch((error) => {
+                    console.error("Error signing in anonymously:", error);
+                });
 
-            // Listen for auth state changes
-            const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+            const unsubscribe = onAuthStateChanged(auth, (user) => {
                 if (user) {
                     setUserId(user.uid);
+                    setIsLoggedIn(!!user.email);
+                    setUserEmail(user.email || null);
                     setIsAuthReady(true);
-                    console.log("Auth state changed, user ID:", user.uid);
+                    console.log("Auth state changed, user ID:", user.uid, "Email:", user.email);
                 } else {
                     setUserId(null);
-                    setIsAuthReady(true); // Still set to true so data fetching can proceed (e.g., for public data)
+                    setIsLoggedIn(false);
+                    setUserEmail(null);
+                    setIsAuthReady(true);
                     console.log("Auth state changed, no user.");
                 }
             });
@@ -69,111 +74,87 @@ const App = () => {
             return () => unsubscribe();
         } catch (error) {
             console.error("Error initializing Firebase:", error);
-            setMessage(`Error initializing Firebase: ${error.message}`);
         }
     }, []);
 
-    // Fetch appointments when auth is ready and db is available
     useEffect(() => {
-    if (db && isAuthReady) {
-        const appointmentsCollectionRef = collection(db, 'appointments');
+        if (db && isAuthReady) {
+            const appointmentsCollectionRef = collection(db, 'appointments');
 
-        const unsubscribe = onSnapshot(appointmentsCollectionRef, (snapshot) => {
-            const fetchedAppointments = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setAppointments(fetchedAppointments);
-            console.log("Appointments fetched:", fetchedAppointments);
-        }, (error) => {
-            console.error("Error fetching appointments:", error);
-            setMessage(`Error fetching appointments: ${error.message}`);
-        });
+            const unsubscribe = onSnapshot(appointmentsCollectionRef, (snapshot) => {
+                const fetchedAppointments = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setAppointments(fetchedAppointments);
+                console.log("Appointments fetched:", fetchedAppointments);
+            }, (error) => {
+                console.error("Error fetching appointments:", error);
+            });
 
-        return () => unsubscribe();
-    }
-}, [db, isAuthReady]);
-
-    // Generate available time slots based on selected date and existing appointments
-    useEffect(() => {
-        if (selectedDate) {
-            const generateTimeSlots = () => {
-                const slots = [];
-                const startHour = 9; // 9 AM
-                const endHour = 17; // 5 PM
-                const intervalMinutes = 30; // 30-minute appointments
-
-                const selectedDateTime = new Date(selectedDate);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0); // Normalize today to start of day
-
-                // If selected date is today, start from current time + interval
-                let currentHour = startHour;
-                let currentMinute = 0;
-
-                if (selectedDateTime.toDateString() === today.toDateString()) {
-                    const now = new Date();
-                    currentHour = now.getHours();
-                    currentMinute = now.getMinutes();
-
-                    // Round up to the next interval
-                    if (currentMinute % intervalMinutes !== 0) {
-                        currentMinute = Math.ceil(currentMinute / intervalMinutes) * intervalMinutes;
-                        if (currentMinute >= 60) {
-                            currentHour += Math.floor(currentMinute / 60);
-                            currentMinute %= 60;
-                        }
-                    }
-                }
-
-                for (let h = currentHour; h < endHour; h++) {
-                    for (let m = (h === currentHour ? currentMinute : 0); m < 60; m += intervalMinutes) {
-                        const slotTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-                        const slotDateTime = new Date(selectedDate);
-                        slotDateTime.setHours(h, m, 0, 0);
-
-                        // Check if the slot is in the past
-                        if (slotDateTime < new Date()) {
-                            continue;
-                        }
-
-                        // Check for existing appointments overlapping with this slot
-                        const isBooked = appointments.some(appt => {
-                            const apptDate = new Date(appt.date);
-                            const apptTime = new Date(`${appt.date}T${appt.time}`); // Combine date and time for full comparison
-
-                            // Check if the appointment is on the same day
-                            if (apptDate.toDateString() === selectedDateTime.toDateString()) {
-                                const apptSlotStart = new Date(appt.date);
-                                apptSlotStart.setHours(parseInt(appt.time.split(':')[0]), parseInt(appt.time.split(':')[1]), 0, 0);
-                                const apptSlotEnd = new Date(apptSlotStart.getTime() + intervalMinutes * 60 * 1000); // Assuming 30 min duration
-
-                                // Check for overlap
-                                // Slot starts during existing appointment OR existing appointment starts during slot
-                                return (slotDateTime >= apptSlotStart && slotDateTime < apptSlotEnd) ||
-                                       (apptSlotStart >= slotDateTime && apptSlotStart < new Date(slotDateTime.getTime() + intervalMinutes * 60 * 1000));
-                            }
-                            return false;
-                        });
-
-                        if (!isBooked) {
-                            slots.push(slotTime);
-                        }
-                    }
-                }
-                return slots;
-            };
-            setAvailableTimeSlots(generateTimeSlots());
-            setSelectedTime(''); // Reset selected time when date changes
+            return () => unsubscribe();
         }
-    }, [selectedDate, appointments]); // Re-run when selectedDate or appointments change
+    }, [db, isAuthReady]);
+
+    useEffect(() => {
+        if (!selectedDate) return;
+
+        const generateTimeSlots = () => {
+            const slots = [];
+            const startHour = 9;
+            const endHour = 17;
+            const intervalMinutes = 30;
+            const selectedDateTime = new Date(selectedDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            let currentHour = startHour;
+            let currentMinute = 0;
+
+            if (selectedDateTime.toDateString() === today.toDateString()) {
+                const now = new Date();
+                currentHour = now.getHours();
+                currentMinute = now.getMinutes();
+
+                if (currentMinute % intervalMinutes !== 0) {
+                    currentMinute = Math.ceil(currentMinute / intervalMinutes) * intervalMinutes;
+                    if (currentMinute >= 60) {
+                        currentHour += Math.floor(currentMinute / 60);
+                        currentMinute %= 60;
+                    }
+                }
+                if (currentHour < 23 || (currentHour === 23 && currentMinute < 35)) { // 11:35 PM rounds to 11:30 PM
+                    currentHour = 23;
+                    currentMinute = 30;
+                }
+            }
+
+            for (let h = currentHour; h <= endHour; h++) {
+                for (let m = (h === currentHour ? currentMinute : 0); m < 60; m += intervalMinutes) {
+                    const slotTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                    const slotDateTime = new Date(selectedDate);
+                    slotDateTime.setHours(h, m, 0, 0);
+
+                    if (slotDateTime >= new Date()) {
+                        const isBooked = appointments.some(appt => appt.date === selectedDate && appt.time === slotTime);
+                        if (!isBooked) slots.push(slotTime);
+                    }
+                }
+            }
+            return slots;
+        };
+
+        const slots = generateTimeSlots();
+        setAvailableTimeSlots(slots);
+        if (slots.length > 0) setSelectedTime(slots[0]);
+    }, [selectedDate, appointments]);
 
     const services = ['Haircut', 'Beard Trim', 'Shave', 'Haircut & Beard Trim'];
 
     const showMessageModal = (title, content, action = null) => {
         setModalTitle(title);
         setModalContent(content);
-        setConfirmAction(() => action); // Use a function to set the action
+        setConfirmAction(() => action);
         setShowModal(true);
     };
 
@@ -182,6 +163,8 @@ const App = () => {
         setModalTitle('');
         setModalContent('');
         setConfirmAction(null);
+        setEmail('');
+        setPassword('');
     };
 
     const handleConfirmModal = () => {
@@ -195,7 +178,12 @@ const App = () => {
         e.preventDefault();
 
         if (!db || !userId) {
-            showMessageModal('Error', 'Firebase not initialized or user not authenticated. Please try again.');
+            showMessageModal('Error', 'Firebase not initialized or user not authenticated.');
+            return;
+        }
+
+        if (!isLoggedIn) {
+            showMessageModal('Login Required', 'Please log in to book this appointment.', () => handleLogin());
             return;
         }
 
@@ -210,11 +198,10 @@ const App = () => {
             service: selectedService,
             date: selectedDate,
             time: selectedTime,
-            bookedBy: userId, // Store the user ID who booked it
+            bookedBy: userId,
             createdAt: new Date().toISOString()
         };
 
-        // Check for double booking before adding
         const isDoubleBooked = appointments.some(appt =>
             appt.date === selectedDate && appt.time === selectedTime
         );
@@ -227,7 +214,6 @@ const App = () => {
         try {
             await addDoc(collection(db, 'appointments'), newAppointment);
             showMessageModal('Success', 'Appointment booked successfully!');
-            // Clear form fields after successful booking
             setClientName('');
             setClientContact('');
             setSelectedService('Haircut');
@@ -249,7 +235,7 @@ const App = () => {
                     return;
                 }
                 try {
-                    await deleteDoc(doc(db, `appointments`, id));
+                    await deleteDoc(doc(db, 'appointments', id));
                     showMessageModal('Success', 'Appointment deleted successfully!');
                 } catch (error) {
                     console.error("Error deleting document: ", error);
@@ -267,19 +253,31 @@ const App = () => {
         return `${year}-${month}-${day}`;
     };
 
+    const handleLogin = async (e) => {
+        e?.preventDefault(); // Optional event for modal form
+        const auth = getAuth();
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            closeModal(); // Close modal after successful login
+        } catch (error) {
+            console.error("Login error:", error);
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white font-inter p-4 sm:p-8 flex flex-col items-center">
-            {/* User ID Display */}
-            <div className="mb-6 bg-gray-800 p-3 rounded-lg shadow-lg w-full max-w-4xl text-center">
-                <p className="text-sm text-gray-400">Your User ID: <span className="font-mono text-blue-400 break-words">{userId || 'Loading...'}</span></p>
-            </div>
+        <>
+            <Header userEmail={userEmail} />
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white font-inter p-4 sm:p-8 flex flex-col items-center">
+            {/* User ID and Login Status Display (hidden) */}
 
             <div className="w-full max-w-4xl bg-gray-800 rounded-xl shadow-2xl p-6 sm:p-10 mb-8">
-                <h1 className="text-4xl sm:text-5xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-                    Barber Shop Booking
-                </h1>
+                <div className="flex items-center justify-center mb-6">
+                    <img src={logo} alt="Barber Shop Logo" className="h-12 mr-4" />
+                    <h1 className="text-4xl sm:text-5xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                        Victor's Barber Studio
+                    </h1>
+                </div>
 
-                {/* Booking Form */}
                 <form onSubmit={handleBookAppointment} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label htmlFor="clientName" className="block text-gray-300 text-sm font-bold mb-2">
@@ -293,6 +291,7 @@ const App = () => {
                             onChange={(e) => setClientName(e.target.value)}
                             placeholder="John Doe"
                             required
+                            disabled={!isLoggedIn}
                         />
                     </div>
                     <div>
@@ -307,6 +306,7 @@ const App = () => {
                             onChange={(e) => setClientContact(e.target.value)}
                             placeholder="john.doe@example.com or 555-1234"
                             required
+                            disabled={!isLoggedIn}
                         />
                     </div>
                     <div>
@@ -319,6 +319,7 @@ const App = () => {
                             value={selectedService}
                             onChange={(e) => setSelectedService(e.target.value)}
                             required
+                            disabled={!isLoggedIn}
                         >
                             {services.map(service => (
                                 <option key={service} value={service}>{service}</option>
@@ -370,7 +371,7 @@ const App = () => {
                         <button
                             type="submit"
                             className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-purple-300"
-                            disabled={!selectedTime || !isAuthReady}
+                            disabled={!selectedTime || !isAuthReady || !isLoggedIn}
                         >
                             Book Appointment
                         </button>
@@ -378,7 +379,6 @@ const App = () => {
                 </form>
             </div>
 
-            {/* Existing Appointments */}
             <div className="w-full max-w-4xl bg-gray-800 rounded-xl shadow-2xl p-6 sm:p-10">
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-600">
                     Your Booked Appointments
@@ -388,7 +388,7 @@ const App = () => {
                 ) : (
                     <div className="space-y-4">
                         {appointments
-                            .filter(appt => appt.bookedBy === userId) // Filter appointments booked by the current user
+                            .filter(appt => appt.bookedBy === userId)
                             .sort((a, b) => {
                                 const dateA = new Date(`${a.date}T${a.time}`);
                                 const dateB = new Date(`${b.date}T${b.time}`);
@@ -429,12 +429,12 @@ const App = () => {
                                             return dateA - dateB;
                                         })
                                         .map((appointment) => (
-                                        <div key={appointment.id} className="bg-gray-600 p-4 rounded-lg shadow-sm">
-                                            <p className="text-lg font-semibold text-blue-300">{appointment.service}</p>
-                                            <p className="text-gray-300">Date: {appointment.date}, Time: {appointment.time}</p>
-                                            <p className="text-gray-400 text-sm">Booked by: {appointment.bookedBy}</p>
-                                        </div>
-                                    ))}
+                                            <div key={appointment.id} className="bg-gray-600 p-4 rounded-lg shadow-sm">
+                                                <p className="text-lg font-semibold text-blue-300">{appointment.service}</p>
+                                                <p className="text-gray-300">Date: {appointment.date}, Time: {appointment.time}</p>
+                                                <p className="text-gray-400 text-sm">Booked by: {appointment.bookedBy}</p>
+                                            </div>
+                                        ))}
                                 </div>
                             </div>
                         )}
@@ -442,13 +442,50 @@ const App = () => {
                 )}
             </div>
 
-            {/* Modal for Messages/Confirmations */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
                     <div className="bg-gray-800 rounded-lg shadow-xl p-6 sm:p-8 max-w-md w-full border border-gray-600">
                         <h3 className="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
                             {modalTitle}
                         </h3>
+                        {modalTitle === 'Login Required' && (
+                            <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="space-y-4">
+                                <div>
+                                    <label htmlFor="modal-email" className="block text-gray-300 text-sm font-bold mb-2">
+                                        Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        id="modal-email"
+                                        className="shadow appearance-none border border-gray-600 rounded-lg w-full py-2 px-3 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-600 placeholder-gray-400"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="your@email.com"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="modal-password" className="block text-gray-300 text-sm font-bold mb-2">
+                                        Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        id="modal-password"
+                                        className="shadow appearance-none border border-gray-600 rounded-lg w-full py-2 px-3 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-600 placeholder-gray-400"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-purple-300 w-full"
+                                >
+                                    Login
+                                </button>
+                            </form>
+                        )}
                         <p className="text-gray-300 text-center mb-6">{modalContent}</p>
                         <div className="flex justify-center space-x-4">
                             {confirmAction && (
@@ -469,7 +506,8 @@ const App = () => {
                     </div>
                 </div>
             )}
-        </div>
+            </div>
+        </>
     );
 };
 
