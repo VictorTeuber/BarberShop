@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig';
 import logo from './images/barbershop_logo_64x64.png';
@@ -15,6 +15,11 @@ const App = () => {
             setModalContent('Please log in to book an appointment.');
             setShowModal(true);
         };
+        
+        // Apply background color to document for overscroll effect
+        document.documentElement.style.backgroundColor = '#f8f9fa';
+        document.body.style.backgroundColor = '#f8f9fa';
+
         return () => {
             window.onHeaderLoginClick = undefined;
         };
@@ -265,28 +270,28 @@ const App = () => {
     };
 
     return (
-        <>
+        <div className="page-wrapper">
             <Header userEmail={userEmail} />
-            <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 text-white font-inter p-4 sm:p-8 flex flex-col items-center">
+            <div className="min-h-screen text-gray-800 font-inter p-4 sm:p-8 flex flex-col items-center">
             {/* User ID and Login Status Display (hidden) */}
 
-            <div className="w-full max-w-4xl bg-gray-800 rounded-xl shadow-2xl p-6 sm:p-10 mb-8">
+            <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg border border-gray-200 p-6 sm:p-10 mb-8">
                 <div className="flex items-center justify-center mb-6">
                     <img src={logo} alt="Barber Shop Logo" className="h-12 mr-4" />
-                    <h1 className="text-4xl sm:text-5xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                    <h1 className="text-4xl sm:text-5xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-green-800">
                         Victor's Barber Studio
                     </h1>
                 </div>
 
                 <form onSubmit={handleBookAppointment} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label htmlFor="clientName" className="block text-gray-300 text-sm font-bold mb-2">
+                        <label htmlFor="clientName" className="block text-gray-700 text-sm font-bold mb-2">
                             Your Name
                         </label>
                         <input
                             type="text"
                             id="clientName"
-                            className="shadow appearance-none border border-gray-600 rounded-lg w-full py-3 px-4 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-700 placeholder-gray-400"
+                            className="shadow appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
                             value={clientName}
                             onChange={(e) => setClientName(e.target.value)}
                             placeholder="John Doe"
@@ -295,13 +300,13 @@ const App = () => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="clientContact" className="block text-gray-300 text-sm font-bold mb-2">
+                        <label htmlFor="clientContact" className="block text-gray-700 text-sm font-bold mb-2">
                             Contact Info (Email/Phone)
                         </label>
                         <input
                             type="text"
                             id="clientContact"
-                            className="shadow appearance-none border border-gray-600 rounded-lg w-full py-3 px-4 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-700 placeholder-gray-400"
+                            className="shadow appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
                             value={clientContact}
                             onChange={(e) => setClientContact(e.target.value)}
                             placeholder="john.doe@example.com or 555-1234"
@@ -310,12 +315,12 @@ const App = () => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="service" className="block text-gray-300 text-sm font-bold mb-2">
+                        <label htmlFor="service" className="block text-gray-700 text-sm font-bold mb-2">
                             Service
                         </label>
                         <select
                             id="service"
-                            className="shadow border border-gray-600 rounded-lg w-full py-3 px-4 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-700 appearance-none pr-8"
+                            className="shadow border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none pr-8"
                             value={selectedService}
                             onChange={(e) => setSelectedService(e.target.value)}
                             required
@@ -327,13 +332,13 @@ const App = () => {
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="date" className="block text-gray-300 text-sm font-bold mb-2">
+                        <label htmlFor="date" className="block text-gray-700 text-sm font-bold mb-2">
                             Date
                         </label>
                         <input
                             type="date"
                             id="date"
-                            className="shadow appearance-none border border-gray-600 rounded-lg w-full py-3 px-4 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-700"
+                            className="shadow appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
                             min={getMinDate()}
@@ -341,7 +346,7 @@ const App = () => {
                         />
                     </div>
                     <div className="md:col-span-2">
-                        <label htmlFor="time" className="block text-gray-300 text-sm font-bold mb-2">
+                        <label htmlFor="time" className="block text-gray-700 text-sm font-bold mb-2">
                             Available Time Slots
                         </label>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -352,8 +357,8 @@ const App = () => {
                                         type="button"
                                         className={`py-2 px-4 rounded-lg font-semibold transition duration-200 ease-in-out
                                             ${selectedTime === slot
-                                                ? 'bg-purple-600 text-white shadow-md'
-                                                : 'bg-gray-700 text-gray-200 hover:bg-purple-500 hover:text-white'
+                                                ? 'bg-green-600 text-white shadow-md'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-green-500 hover:text-white border border-gray-300'
                                             }`}
                                         onClick={() => setSelectedTime(slot)}
                                     >
@@ -361,7 +366,7 @@ const App = () => {
                                     </button>
                                 ))
                             ) : (
-                                <p className="col-span-full text-gray-400 text-center">
+                                <p className="col-span-full text-gray-600 text-center">
                                     {selectedDate ? 'No available slots for this date.' : 'Please select a date to see available slots.'}
                                 </p>
                             )}
@@ -370,7 +375,7 @@ const App = () => {
                     <div className="md:col-span-2 flex justify-center mt-6">
                         <button
                             type="submit"
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-purple-300"
+                            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-300"
                             disabled={!selectedTime || !isAuthReady || !isLoggedIn}
                         >
                             Book Appointment
@@ -379,12 +384,12 @@ const App = () => {
                 </form>
             </div>
 
-            <div className="w-full max-w-4xl bg-gray-800 rounded-xl shadow-2xl p-6 sm:p-10">
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-600">
+            <div className="w-full max-w-4xl bg-white rounded-xl shadow-lg border border-gray-200 p-6 sm:p-10">
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-green-800">
                     Your Booked Appointments
                 </h2>
                 {appointments.length === 0 ? (
-                    <p className="text-center text-gray-400 text-lg">No appointments booked yet.</p>
+                    <p className="text-center text-gray-600 text-lg">No appointments booked yet.</p>
                 ) : (
                     <div className="space-y-4">
                         {appointments
@@ -395,16 +400,16 @@ const App = () => {
                                 return dateA - dateB;
                             })
                             .map((appointment) => (
-                                <div key={appointment.id} className="bg-gray-700 p-5 rounded-lg shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                                <div key={appointment.id} className="bg-gray-50 border border-gray-200 p-5 rounded-lg shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center">
                                     <div>
-                                        <p className="text-xl font-semibold text-purple-300">{appointment.service}</p>
-                                        <p className="text-gray-300">
+                                        <p className="text-xl font-semibold text-green-700">{appointment.service}</p>
+                                        <p className="text-gray-600">
                                             <span className="font-medium">Date:</span> {appointment.date}
                                         </p>
-                                        <p className="text-gray-300">
+                                        <p className="text-gray-600">
                                             <span className="font-medium">Time:</span> {appointment.time}
                                         </p>
-                                        <p className="text-gray-400 text-sm">
+                                        <p className="text-gray-500 text-sm">
                                             Client: {appointment.clientName} ({appointment.clientContact})
                                         </p>
                                     </div>
@@ -418,8 +423,8 @@ const App = () => {
                             ))
                         }
                         {appointments.filter(appt => appt.bookedBy !== userId).length > 0 && (
-                            <div className="mt-8 pt-4 border-t border-gray-600">
-                                <h3 className="text-2xl font-bold text-center mb-4 text-gray-400">Other Booked Appointments</h3>
+                            <div className="mt-8 pt-4 border-t border-gray-300">
+                                <h3 className="text-2xl font-bold text-center mb-4 text-gray-600">Other Booked Appointments</h3>
                                 <div className="space-y-3">
                                     {appointments
                                         .filter(appt => appt.bookedBy !== userId)
@@ -429,10 +434,10 @@ const App = () => {
                                             return dateA - dateB;
                                         })
                                         .map((appointment) => (
-                                            <div key={appointment.id} className="bg-gray-600 p-4 rounded-lg shadow-sm">
-                                                <p className="text-lg font-semibold text-blue-300">{appointment.service}</p>
-                                                <p className="text-gray-300">Date: {appointment.date}, Time: {appointment.time}</p>
-                                                <p className="text-gray-400 text-sm">Booked by: {appointment.bookedBy}</p>
+                                            <div key={appointment.id} className="bg-gray-100 border border-gray-200 p-4 rounded-lg shadow-sm">
+                                                <p className="text-lg font-semibold text-green-600">{appointment.service}</p>
+                                                <p className="text-gray-600">Date: {appointment.date}, Time: {appointment.time}</p>
+                                                <p className="text-gray-500 text-sm">Booked by: {appointment.bookedBy}</p>
                                             </div>
                                         ))}
                                 </div>
@@ -444,20 +449,20 @@ const App = () => {
 
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 rounded-lg shadow-xl p-6 sm:p-8 max-w-md w-full border border-gray-600">
-                        <h3 className="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                    <div className="bg-white rounded-lg shadow-xl p-6 sm:p-8 max-w-md w-full border border-gray-300">
+                        <h3 className="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-green-800">
                             {modalTitle}
                         </h3>
                         {modalTitle === 'Login Required' && (
                             <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="space-y-4">
                                 <div>
-                                    <label htmlFor="modal-email" className="block text-gray-300 text-sm font-bold mb-2">
+                                    <label htmlFor="modal-email" className="block text-gray-700 text-sm font-bold mb-2">
                                         Email
                                     </label>
                                     <input
                                         type="email"
                                         id="modal-email"
-                                        className="shadow appearance-none border border-gray-600 rounded-lg w-full py-2 px-3 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-600 placeholder-gray-400"
+                                        className="shadow appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         placeholder="your@email.com"
@@ -465,13 +470,13 @@ const App = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label htmlFor="modal-password" className="block text-gray-300 text-sm font-bold mb-2">
+                                    <label htmlFor="modal-password" className="block text-gray-700 text-sm font-bold mb-2">
                                         Password
                                     </label>
                                     <input
                                         type="password"
                                         id="modal-password"
-                                        className="shadow appearance-none border border-gray-600 rounded-lg w-full py-2 px-3 text-gray-200 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-600 placeholder-gray-400"
+                                        className="shadow appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         placeholder="••••••••"
@@ -480,13 +485,13 @@ const App = () => {
                                 </div>
                                 <button
                                     type="submit"
-                                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-purple-300 w-full"
+                                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-300 w-full"
                                 >
                                     Login
                                 </button>
                             </form>
                         )}
-                        <p className="text-gray-300 text-center mb-6">{modalContent}</p>
+                        <p className="text-gray-700 text-center mb-6">{modalContent}</p>
                         <div className="flex justify-center space-x-4">
                             {confirmAction && (
                                 <button
@@ -498,7 +503,7 @@ const App = () => {
                             )}
                             <button
                                 onClick={closeModal}
-                                className={`${confirmAction ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold py-2 px-5 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                className={`${confirmAction ? 'bg-gray-400 hover:bg-gray-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold py-2 px-5 rounded-full shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500`}
                             >
                                 {confirmAction ? 'Cancel' : 'OK'}
                             </button>
@@ -507,7 +512,7 @@ const App = () => {
                 </div>
             )}
             </div>
-        </>
+        </div>
     );
 };
 
