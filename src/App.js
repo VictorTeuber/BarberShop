@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig';
 import logo from './images/barbershop_logo_64x64.png';
 import Header from './Header';
 
 const App = () => {
-    // Make Header login button open the login modal
+    // Make Header login and signup buttons open the modal
     const [userEmail, setUserEmail] = useState(null);
+    const [isSignupMode, setIsSignupMode] = useState(false); // Toggle between login and signup
     useEffect(() => {
         window.onHeaderLoginClick = () => {
+            setIsSignupMode(false);
             setModalTitle('Login Required');
             setModalContent('Please log in to book an appointment.');
+            setShowModal(true);
+        };
+        window.onHeaderSignupClick = () => {
+            setIsSignupMode(true);
+            setModalTitle('Sign Up');
+            setModalContent('Create a new account to book appointments.');
             setShowModal(true);
         };
         
@@ -22,6 +30,7 @@ const App = () => {
 
         return () => {
             window.onHeaderLoginClick = undefined;
+            window.onHeaderSignupClick = undefined;
         };
     }, []);
     const [db, setDb] = useState(null);
@@ -33,14 +42,18 @@ const App = () => {
     const [selectedService, setSelectedService] = useState('Haircut');
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedTime, setSelectedTime] = useState('');
+    // Track if booking is pending after login/signup
+    const [pendingBooking, setPendingBooking] = useState(false);
     const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [modalContent, setModalContent] = useState('');
     const [modalTitle, setModalTitle] = useState('');
     const [confirmAction, setConfirmAction] = useState(null);
-    const [email, setEmail] = useState(''); // For login modal
-    const [password, setPassword] = useState(''); // For login modal
+    const [email, setEmail] = useState(''); // For login/signup modal
+    const [password, setPassword] = useState(''); // For login/signup modal
     const [isLoggedIn, setIsLoggedIn] = useState(false); // Track login status
+    // New state for password confirmation
+    const [confirmPassword, setConfirmPassword] = useState(''); // For signup confirmation
 
     useEffect(() => {
         try {
@@ -170,6 +183,7 @@ const App = () => {
         setConfirmAction(null);
         setEmail('');
         setPassword('');
+        setConfirmPassword(''); // Clear confirm password on close
     };
 
     const handleConfirmModal = () => {
@@ -182,13 +196,8 @@ const App = () => {
     const handleBookAppointment = async (e) => {
         e.preventDefault();
 
-        if (!db || !userId) {
-            showMessageModal('Error', 'Firebase not initialized or user not authenticated.');
-            return;
-        }
-
-        if (!isLoggedIn) {
-            showMessageModal('Login Required', 'Please log in to book this appointment.', () => handleLogin());
+        if (!db) {
+            showMessageModal('Error', 'Firebase not initialized.');
             return;
         }
 
@@ -197,6 +206,24 @@ const App = () => {
             return;
         }
 
+        if (!isLoggedIn) {
+            setPendingBooking(true);
+            setIsSignupMode(false);
+            setModalTitle('Login Required');
+            setModalContent('Please log in to book this appointment.');
+            setShowModal(true);
+            return;
+        }
+
+        await bookAppointment();
+    };
+
+    // Helper to book appointment (used after login/signup if pendingBooking)
+    const bookAppointment = async () => {
+        if (!db || !userId) {
+            showMessageModal('Error', 'Firebase not initialized or user not authenticated.');
+            return;
+        }
         const newAppointment = {
             clientName,
             clientContact,
@@ -206,16 +233,13 @@ const App = () => {
             bookedBy: userId,
             createdAt: new Date().toISOString()
         };
-
         const isDoubleBooked = appointments.some(appt =>
             appt.date === selectedDate && appt.time === selectedTime
         );
-
         if (isDoubleBooked) {
             showMessageModal('Booking Conflict', 'This time slot is no longer available. Please choose another one.');
             return;
         }
-
         try {
             await addDoc(collection(db, 'appointments'), newAppointment);
             showMessageModal('Success', 'Appointment booked successfully!');
@@ -264,14 +288,68 @@ const App = () => {
         try {
             await signInWithEmailAndPassword(auth, email, password);
             closeModal(); // Close modal after successful login
+            if (pendingBooking) {
+                setPendingBooking(false);
+                await bookAppointment();
+            }
         } catch (error) {
             console.error("Login error:", error);
+            let errorMessage = 'An unexpected error occurred during login.';
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                errorMessage = 'Wrong email or password. Please try again.';
+            }
+            showMessageModal('Login Failed', errorMessage);
+        }
+    };
+
+    const handleSignup = async (e) => {
+        e?.preventDefault(); // Optional event for modal form
+        const auth = getAuth();
+        try {
+            if (password !== confirmPassword) {
+                showMessageModal('Signup Failed', 'Passwords do not match. Please try again.');
+                return;
+            }
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            console.log("User created:", userCredential.user);
+            closeModal(); // Close modal after successful signup
+            if (pendingBooking) {
+                setPendingBooking(false);
+                await bookAppointment();
+            }
+        } catch (error) {
+            console.error("Signup error:", error);
+            let errorMessage = 'An unexpected error occurred during signup. Please try again.';
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'This email is already in use. Please use a different email or log in.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Invalid email format. Please try again.';
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = 'Password should be at least 6 characters. Please try again.';
+            }
+            showMessageModal('Signup Failed', errorMessage);
+        }
+    };
+
+    const handleLogout = async () => {
+        console.log('Logout button clicked');
+        const auth = getAuth();
+        try {
+            await signOut(auth);
+            console.log("User signed out");
+            // Reset states on logout
+            setUserEmail(null);
+            setUserId(null);
+            setIsLoggedIn(false);
+        } catch (error) {
+            console.error("Logout error:", error);
+            showMessageModal('Logout Failed', 'An error occurred while logging out. Please try again.');
         }
     };
 
     return (
         <div className="page-wrapper">
-            <Header userEmail={userEmail} />
+            <Header userEmail={userEmail} onLogout={handleLogout} />
             <div className="min-h-screen text-gray-800 font-inter p-4 sm:p-8 flex flex-col items-center">
             {/* User ID and Login Status Display (hidden) */}
 
@@ -296,22 +374,20 @@ const App = () => {
                             onChange={(e) => setClientName(e.target.value)}
                             placeholder="John Doe"
                             required
-                            disabled={!isLoggedIn}
                         />
                     </div>
                     <div>
                         <label htmlFor="clientContact" className="block text-gray-700 text-sm font-bold mb-2">
-                            Contact Info (Email/Phone)
+                            Phone
                         </label>
                         <input
-                            type="text"
+                            type="tel"
                             id="clientContact"
                             className="shadow appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
                             value={clientContact}
                             onChange={(e) => setClientContact(e.target.value)}
-                            placeholder="john.doe@example.com or 555-1234"
+                            placeholder="555-1234"
                             required
-                            disabled={!isLoggedIn}
                         />
                     </div>
                     <div>
@@ -324,7 +400,6 @@ const App = () => {
                             value={selectedService}
                             onChange={(e) => setSelectedService(e.target.value)}
                             required
-                            disabled={!isLoggedIn}
                         >
                             {services.map(service => (
                                 <option key={service} value={service}>{service}</option>
@@ -376,7 +451,7 @@ const App = () => {
                         <button
                             type="submit"
                             className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-300"
-                            disabled={!selectedTime || !isAuthReady || !isLoggedIn}
+                            disabled={!selectedTime || !isAuthReady}
                         >
                             Book Appointment
                         </button>
@@ -453,8 +528,8 @@ const App = () => {
                         <h3 className="text-2xl font-bold mb-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-green-800">
                             {modalTitle}
                         </h3>
-                        {modalTitle === 'Login Required' && (
-                            <form onSubmit={(e) => { e.preventDefault(); handleLogin(); }} className="space-y-4">
+                        {(modalTitle === 'Login Required' || modalTitle === 'Sign Up') && (
+                            <form onSubmit={(e) => { e.preventDefault(); isSignupMode ? handleSignup(e) : handleLogin(e); }} className="space-y-4">
                                 <div>
                                     <label htmlFor="modal-email" className="block text-gray-700 text-sm font-bold mb-2">
                                         Email
@@ -483,11 +558,47 @@ const App = () => {
                                         required
                                     />
                                 </div>
+                                {isSignupMode && (
+                                    <div>
+                                        <label htmlFor="modal-confirm-password" className="block text-gray-700 text-sm font-bold mb-2">
+                                            Confirm Password
+                                        </label>
+                                        <input
+                                            type="password"
+                                            id="modal-confirm-password"
+                                            className="shadow appearance-none border border-gray-300 rounded-lg w-full py-2 px-3 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 bg-white placeholder-gray-500"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            required
+                                        />
+                                    </div>
+                                )}
                                 <button
                                     type="submit"
                                     className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-2 px-4 rounded-full shadow-lg transform hover:scale-105 transition duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-green-300 w-full"
+                                    aria-label={isSignupMode ? 'Sign Up' : 'Login'}
                                 >
-                                    Login
+                                    {isSignupMode ? 'Sign Up' : 'Login'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEmail('');
+                                        setPassword('');
+                                        setConfirmPassword('');
+                                        setIsSignupMode(!isSignupMode);
+                                        if (isSignupMode) {
+                                            setModalTitle('Login Required');
+                                            setModalContent('Please log in to book an appointment.');
+                                        } else {
+                                            setModalTitle('Sign Up');
+                                            setModalContent('Create a new account to book appointments.');
+                                        }
+                                    }}
+                                    className="mt-2 text-green-600 hover:text-green-800 text-sm font-semibold w-full text-center"
+                                >
+                                    {isSignupMode ? 'Already have an account? Log in' : 'Need an account? Sign up'}
                                 </button>
                             </form>
                         )}
